@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>最安値くらべ — ネットショッピング価格比較</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1f2430;
+    --sub: #6b7280;
+    --line: #e5e7eb;
+    --accent: #e2231a;
+    --best: #16a34a;
+    --best-bg: #ecfdf3;
+    --rakuten: #bf0000;
+    --yahoo: #ff0033;
+    --amazon: #ff9900;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, #e2231a, #ff6a3d);
+    color: #fff;
+    padding: 22px 20px;
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: .9; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+  .searchbar {
+    display: flex;
+    gap: 8px;
+    margin: 18px 0 6px;
+  }
+  .searchbar input {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .searchbar button {
+    padding: 0 22px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .searchbar button:disabled { opacity: .5; cursor: default; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--sub);
+    margin-bottom: 8px;
+  }
+  .controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .controls select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); }
+
+  .status { font-size: 13px; color: var(--sub); min-height: 20px; margin: 6px 2px; }
+
+  .results { display: grid; gap: 12px; margin-top: 6px; }
+  .item {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 84px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    position: relative;
+  }
+  .item.best { border-color: var(--best); box-shadow: 0 0 0 2px var(--best-bg); }
+  .thumb {
+    width: 84px; height: 84px; object-fit: contain;
+    background: #fafafa; border-radius: 10px; border: 1px solid var(--line);
+  }
+  .info h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .info h3 a { color: var(--ink); text-decoration: none; }
+  .info h3 a:hover { text-decoration: underline; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  .badge {
+    padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 700;
+  }
+  .badge.rakuten { background: var(--rakuten); }
+  .badge.yahoo { background: var(--yahoo); }
+  .badge.amazon { background: var(--amazon); }
+  .meta { font-size: 12px; color: var(--sub); }
+  .price-col { text-align: right; white-space: nowrap; }
+  .price { font-size: 22px; font-weight: 800; color: var(--accent); }
+  .price small { font-size: 12px; font-weight: 600; }
+  .effective { font-size: 12px; color: var(--sub); }
+  .best-tag {
+    position: absolute; top: -10px; left: 12px;
+    background: var(--best); color: #fff; font-size: 11px; font-weight: 700;
+    padding: 2px 10px; border-radius: 999px;
+  }
+
+  details.settings {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 14px; margin-bottom: 6px; font-size: 14px;
+  }
+  details.settings summary { cursor: pointer; font-weight: 600; }
+  details.settings .row { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  details.settings input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  details.settings .hint { font-size: 12px; color: var(--sub); }
+  details.settings a { color: var(--accent); }
+
+  footer { text-align: center; font-size: 12px; color: var(--sub); padding: 24px; }
+  .empty { text-align: center; color: var(--sub); padding: 40px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛒 最安値くらべ</h1>
+  <p>楽天・Yahoo!・Amazon を横断して、実質価格で最安を検索</p>
+</header>
+
+<div class="wrap">
+
+  <details class="settings">
+    <summary>⚙️ 設定（楽天でライブ価格を出すにはこちら）</summary>
+    <div class="row">
+      <label for="rakutenId">楽天 アプリケーションID（applicationId）</label>
+      <input id="rakutenId" type="text" placeholder="例: 93820e4d-0f12-4163-ab5d-..." />
+    </div>
+    <div class="row">
+      <label for="rakutenKey">楽天 アクセスキー（accessKey）</label>
+      <input id="rakutenKey" type="text" placeholder="アプリ詳細の「アクセスキー」の値" />
+      <span class="hint">
+        <a href="https://webservice.rakuten.co.jp/app/list" target="_blank" rel="noopener">楽天ウェブサービスのアプリ一覧</a>
+        で「アプリケーションID」と「アクセスキー」をコピーして貼ってください。
+        <br>※ この2つはあなたのブラウザ内だけに保存され、公開ページには一切埋め込まれません。
+      </span>
+    </div>
+  </details>
+
+  <div class="searchbar">
+    <input id="q" type="text" placeholder="商品名やキーワードを入力（例: ワイヤレスイヤホン）" />
+    <button id="go">検索</button>
+  </div>
+
+  <div class="controls">
+    <label><input type="checkbox" id="demo" checked /> デモデータも表示（サンプル）</label>
+    <label>並び順:
+      <select id="sort">
+        <option value="effective">実質価格が安い順</option>
+        <option value="price">表示価格が安い順</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="results" id="results">
+    <div class="empty">キーワードを入れて「検索」を押してください。</div>
+  </div>
+
+</div>
+
+<footer>
+  最安値くらべ v1 &middot; 楽天はアプリID設定でライブ検索 / Yahoo!・Amazon はデモ表示<br>
+  実質価格 ＝ 表示価格 ＋ 送料 − ポイント（分かる範囲で計算）
+</footer>
+
+<script>
+// ------- localStorage の安全ラッパー -------
+// file:// で開くと localStorage が例外を投げるブラウザがあるため、失敗しても止まらないようにする
+const store = {
+  data: {},
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return this.data[k] || null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { this.data[k] = v; } }
+};
+
+// ------- 設定の保存/復元 -------
+const rakutenInput = document.getElementById('rakutenId');
+rakutenInput.value = store.get('rakutenAppId') || '';
+rakutenInput.addEventListener('input', () => {
+  store.set('rakutenAppId', rakutenInput.value.trim());
+});
+const rakutenKeyInput = document.getElementById('rakutenKey');
+rakutenKeyInput.value = store.get('rakutenAccessKey') || '';
+rakutenKeyInput.addEventListener('input', () => {
+  store.set('rakutenAccessKey', rakutenKeyInput.value.trim());
+});
+
+const $q = document.getElementById('q');
+const $go = document.getElementById('go');
+const $status = document.getElementById('status');
+const $results = document.getElementById('results');
+const $sort = document.getElementById('sort');
+const $demo = document.getElementById('demo');
+
+// ------- 楽天API（新方式 openapi.rakuten.co.jp / CORS対応・fetchで直接呼ぶ） -------
+let lastRakutenError = '';
+async function searchRakuten(keyword) {
+  lastRakutenError = '';
+  const appId = (store.get('rakutenAppId') || '').trim();
+  const accessKey = (store.get('rakutenAccessKey') || '').trim();
+  if (!appId || !accessKey) return []; // 未設定ならスキップ
+
+  const url = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701'
+    + '?format=json'
+    + '&applicationId=' + encodeURIComponent(appId)
+    + '&accessKey=' + encodeURIComponent(accessKey)
+    + '&keyword=' + encodeURIComponent(keyword)
+    + '&hits=10&sort=%2BitemPrice';
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.errors) {
+      lastRakutenError = '楽天API: ' + (data.errors.errorMessage || 'エラー');
+      return [];
+    }
+    return (data.Items || []).map(w => {
+      const it = w.Item || w; // formatによる入れ子の差を吸収
+      return {
+        shop: 'rakuten',
+        title: it.itemName,
+        price: it.itemPrice,
+        shipping: it.postageFlag === 0 ? 0 : null, // 0=送料込み, 1=別
+        points: Math.round(it.itemPrice * (it.pointRate || 1) / 100),
+        image: (it.mediumImageUrls && it.mediumImageUrls[0] && (it.mediumImageUrls[0].imageUrl || it.mediumImageUrls[0])) || '',
+        url: it.itemUrl,
+        seller: it.shopName
+      };
+    });
+  } catch (e) {
+    lastRakutenError = '楽天への接続に失敗しました（' + e.message + '）';
+    return [];
+  }
+}
+
+// ------- デモデータ（Yahoo!/Amazon の枠を体験するためのサンプル） -------
+function demoItems(keyword) {
+  const base = 3200 + (keyword.length * 37) % 900;
+  return [
+    { shop: 'yahoo',  title: keyword + '（Yahoo!ショッピング サンプル）', price: base + 180, shipping: 0,   points: Math.round((base+180)*0.05), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル店' },
+    { shop: 'amazon', title: keyword + '（Amazon サンプル）',           price: base - 120, shipping: 410, points: 0,                        image: '', url: 'https://www.amazon.co.jp/', seller: 'Amazon.co.jp' },
+    { shop: 'yahoo',  title: keyword + '（Yahoo! 別ショップ サンプル）', price: base + 60,  shipping: null, points: Math.round((base+60)*0.03), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル商店' },
+  ];
+}
+
+// ------- 実質価格の計算 -------
+function effectivePrice(it) {
+  const ship = (it.shipping == null) ? 0 : it.shipping; // 不明は0扱い（注記で明示）
+  const pts = it.points || 0;
+  return it.price + ship - pts;
+}
+
+const shopLabel = { rakuten: '楽天市場', yahoo: 'Yahoo!', amazon: 'Amazon' };
+
+function render(items) {
+  if (!items.length) {
+    $results.innerHTML = '<div class="empty">該当する商品が見つかりませんでした。</div>';
+    return;
+  }
+  const key = $sort.value;
+  items.sort((a, b) => (key === 'price' ? a.price - b.price : effectivePrice(a) - effectivePrice(b)));
+  const bestVal = key === 'price' ? items[0].price : effectivePrice(items[0]);
+
+  $results.innerHTML = items.map((it, i) => {
+    const isBest = (key === 'price' ? it.price : effectivePrice(it)) === bestVal;
+    const shipTxt = it.shipping === 0 ? '送料込み'
+                  : it.shipping == null ? '送料要確認'
+                  : ('送料 +' + it.shipping.toLocaleString() + '円');
+    const ptsTxt = it.points ? ('・ポイント ' + it.points.toLocaleString() + 'P') : '';
+    const eff = effectivePrice(it);
+    const thumb = it.image
+      ? '<img class="thumb" src="' + it.image + '" alt="" />'
+      : '<div class="thumb"></div>';
+    return `
+      <div class="item ${isBest ? 'best' : ''}">
+        ${isBest ? '<span class="best-tag">最安</span>' : ''}
+        ${thumb}
+        <div class="info">
+          <h3><a href="${it.url}" target="_blank" rel="noopener">${escapeHtml(it.title)}</a></h3>
+          <div class="badges">
+            <span class="badge ${it.shop}">${shopLabel[it.shop]}</span>
+            <span class="meta">${escapeHtml(it.seller || '')}</span>
+          </div>
+          <div class="meta">${shipTxt}${ptsTxt}</div>
+        </div>
+        <div class="price-col">
+          <div class="price">${it.price.toLocaleString()}<small>円</small></div>
+          <div class="effective">実質 ${eff.toLocaleString()}円</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function doSearch() {
+  const keyword = $q.value.trim();
+  if (!keyword) {
+    $status.textContent = 'キーワードを入力してください。';
+    $results.innerHTML = '<div class="empty">検索したい商品名やキーワードを入力してください。</div>';
+    $q.focus();
+    return;
+  }
+  $go.disabled = true;
+  $status.textContent = '検索中…';
+  $results.innerHTML = '<div class="empty">検索中…</div>';
+
+  const tasks = [ searchRakuten(keyword) ];
+  const [rakuten] = await Promise.all(tasks);
+
+  let items = [...rakuten];
+  if ($demo.checked) items = items.concat(demoItems(keyword));
+
+  const notes = [];
+  if (!store.get('rakutenAppId') || !store.get('rakutenAccessKey')) notes.push('楽天は未設定のため非表示（⚙️設定で有効化）');
+  if (lastRakutenError) notes.push(lastRakutenError);
+  if ($demo.checked) notes.push('Yahoo!・Amazon はサンプル表示');
+  $status.textContent = items.length + '件' + (notes.length ? '（' + notes.join(' / ') + '）' : '');
+
+  render(items);
+  $go.disabled = false;
+}
+
+$go.addEventListener('click', doSearch);
+$q.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$sort.addEventListener('change', () => { if ($results.querySelector('.item')) doSearch(); });
+</script>
+</body>
+</html>
