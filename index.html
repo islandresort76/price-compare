@@ -124,6 +124,14 @@
 
   footer { text-align: center; font-size: 12px; color: var(--sub); padding: 24px; }
   .empty { text-align: center; color: var(--sub); padding: 40px 10px; }
+  #amazonLink { margin: 4px 0 10px; }
+  .amazon-search {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--amazon); color: #1f2430; font-weight: 700; font-size: 14px;
+    padding: 10px 16px; border-radius: 10px; text-decoration: none;
+  }
+  .amazon-search:hover { filter: brightness(0.95); }
+  .amazon-note { font-size: 11px; color: var(--sub); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -164,7 +172,6 @@
   </div>
 
   <div class="controls">
-    <label><input type="checkbox" id="demo" checked /> デモデータも表示（サンプル）</label>
     <label>並び順:
       <select id="sort">
         <option value="effective">実質価格が安い順</option>
@@ -174,6 +181,7 @@
   </div>
 
   <div class="status" id="status"></div>
+  <div id="amazonLink"></div>
   <div class="results" id="results">
     <div class="empty">キーワードを入れて「検索」を押してください。</div>
   </div>
@@ -181,7 +189,7 @@
 </div>
 
 <footer>
-  最安値くらべ v1 &middot; 楽天はアプリID設定でライブ検索 / Yahoo!・Amazon はデモ表示<br>
+  最安値くらべ &middot; 楽天・Yahoo! はライブ価格で比較 / Amazon は検索リンクで確認<br>
   実質価格 ＝ 表示価格 ＋ 送料 − ポイント（分かる範囲で計算）
 </footer>
 
@@ -216,7 +224,7 @@ const $go = document.getElementById('go');
 const $status = document.getElementById('status');
 const $results = document.getElementById('results');
 const $sort = document.getElementById('sort');
-const $demo = document.getElementById('demo');
+const $amazonLink = document.getElementById('amazonLink');
 
 // ------- 楽天API（新方式 openapi.rakuten.co.jp / CORS対応・fetchで直接呼ぶ） -------
 let lastRakutenError = '';
@@ -295,19 +303,6 @@ async function searchYahoo(keyword) {
   }
 }
 
-// ------- デモデータ（Yahoo!/Amazon の枠を体験するためのサンプル） -------
-function demoItems(keyword, yahooLive) {
-  const base = 3200 + (keyword.length * 37) % 900;
-  const list = [
-    { shop: 'amazon', title: keyword + '（Amazon サンプル）',           price: base - 120, shipping: 410, points: 0,                        image: '', url: 'https://www.amazon.co.jp/', seller: 'Amazon.co.jp' },
-  ];
-  if (!yahooLive) {
-    list.push({ shop: 'yahoo', title: keyword + '（Yahoo!ショッピング サンプル）', price: base + 180, shipping: 0,   points: Math.round((base+180)*0.05), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル店' });
-    list.push({ shop: 'yahoo', title: keyword + '（Yahoo! 別ショップ サンプル）', price: base + 60,  shipping: null, points: Math.round((base+60)*0.03), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル商店' });
-  }
-  return list;
-}
-
 // ------- 実質価格の計算 -------
 function effectivePrice(it) {
   const ship = (it.shipping == null) ? 0 : it.shipping; // 不明は0扱い（注記で明示）
@@ -373,21 +368,27 @@ async function doSearch() {
   $results.innerHTML = '<div class="empty">検索中…</div>';
 
   const [rakuten, yahoo] = await Promise.all([ searchRakuten(keyword), searchYahoo(keyword) ]);
-  const yahooLive = !!((store.get('yahooProxyUrl') || '').trim() || DEFAULT_YAHOO_PROXY);
 
-  let items = [...rakuten, ...yahoo];
-  if ($demo.checked) items = items.concat(demoItems(keyword, yahooLive));
+  const items = [...rakuten, ...yahoo];
 
   const notes = [];
   if (!store.get('rakutenAppId') || !store.get('rakutenAccessKey')) notes.push('楽天は未設定（⚙️設定で有効化）');
   if (lastRakutenError) notes.push(lastRakutenError);
-  if (!yahooLive) notes.push('Yahoo!中継URL未設定');
   if (lastYahooError) notes.push(lastYahooError);
-  if ($demo.checked) notes.push(yahooLive ? 'Amazon はサンプル表示' : 'Yahoo!・Amazon はサンプル表示');
   $status.textContent = items.length + '件' + (notes.length ? '（' + notes.join(' / ') + '）' : '');
 
   render(items);
+  renderAmazonLink(keyword);
   $go.disabled = false;
+}
+
+// ------- Amazonは正規の無料APIが無いため、検索リンクで補う -------
+function renderAmazonLink(keyword) {
+  const url = 'https://www.amazon.co.jp/s?k=' + encodeURIComponent(keyword);
+  $amazonLink.innerHTML =
+    '<a class="amazon-search" href="' + url + '" target="_blank" rel="noopener">'
+    + '🔎 Amazonで「' + escapeHtml(keyword) + '」を検索（新しいタブで開く）</a>'
+    + '<div class="amazon-note">※ Amazonは価格APIを個人提供していないため、価格の自動取得はできません。ボタンからAmazonでご確認ください。</div>';
 }
 
 $go.addEventListener('click', doSearch);
