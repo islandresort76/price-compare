@@ -149,6 +149,13 @@
         <br>※ この2つはあなたのブラウザ内だけに保存され、公開ページには一切埋め込まれません。
       </span>
     </div>
+    <div class="row">
+      <label for="yahooProxy">Yahoo! 中継URL（Cloudflare Worker）</label>
+      <input id="yahooProxy" type="text" placeholder="既定で設定済み（変更する場合のみ入力）" />
+      <span class="hint">
+        Yahoo!の中継役URLは既にアプリに組み込まれているので、通常は空欄のままでOKです（自動で使われます）。別の中継役に差し替えたい場合だけ入力してください。
+      </span>
+    </div>
   </details>
 
   <div class="searchbar">
@@ -198,6 +205,11 @@ rakutenKeyInput.value = store.get('rakutenAccessKey') || '';
 rakutenKeyInput.addEventListener('input', () => {
   store.set('rakutenAccessKey', rakutenKeyInput.value.trim());
 });
+const yahooProxyInput = document.getElementById('yahooProxy');
+yahooProxyInput.value = store.get('yahooProxyUrl') || '';
+yahooProxyInput.addEventListener('input', () => {
+  store.set('yahooProxyUrl', yahooProxyInput.value.trim().replace(/\/$/, ''));
+});
 
 const $q = document.getElementById('q');
 const $go = document.getElementById('go');
@@ -246,14 +258,54 @@ async function searchRakuten(keyword) {
   }
 }
 
+// ------- Yahoo!ショッピング（中継役 Cloudflare Worker 経由で呼ぶ） -------
+let lastYahooError = '';
+// Yahoo!中継役（Cloudflare Worker）の既定URL。設定欄で上書き可能。
+const DEFAULT_YAHOO_PROXY = 'https://yahoo-proxy.islandresort76.workers.dev';
+function decodeEntities(s) {
+  return String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+async function searchYahoo(keyword) {
+  lastYahooError = '';
+  const proxy = ((store.get('yahooProxyUrl') || '').trim() || DEFAULT_YAHOO_PROXY);
+  if (!proxy) return []; // 中継URL未設定ならスキップ
+
+  const url = proxy + '?query=' + encodeURIComponent(keyword) + '&hits=10&sort=%2Bprice';
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.Error || data.error) {
+      lastYahooError = 'Yahoo!API: ' + ((data.Error && data.Error.Message) || data.error);
+      return [];
+    }
+    return (data.hits || []).map(h => ({
+      shop: 'yahoo',
+      title: decodeEntities(h.name),
+      price: h.price,
+      shipping: (h.shipping && h.shipping.code === 2) ? 0 : null, // code2=送料無料, それ以外は要確認
+      points: (h.point && h.point.amount) || 0,
+      image: (h.image && (h.image.medium || h.image.small)) || (h.exImage && h.exImage.url) || '',
+      url: h.url,
+      seller: (h.seller && h.seller.name) || ''
+    }));
+  } catch (e) {
+    lastYahooError = 'Yahoo!中継役への接続に失敗しました（' + e.message + '）';
+    return [];
+  }
+}
+
 // ------- デモデータ（Yahoo!/Amazon の枠を体験するためのサンプル） -------
-function demoItems(keyword) {
+function demoItems(keyword, yahooLive) {
   const base = 3200 + (keyword.length * 37) % 900;
-  return [
-    { shop: 'yahoo',  title: keyword + '（Yahoo!ショッピング サンプル）', price: base + 180, shipping: 0,   points: Math.round((base+180)*0.05), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル店' },
+  const list = [
     { shop: 'amazon', title: keyword + '（Amazon サンプル）',           price: base - 120, shipping: 410, points: 0,                        image: '', url: 'https://www.amazon.co.jp/', seller: 'Amazon.co.jp' },
-    { shop: 'yahoo',  title: keyword + '（Yahoo! 別ショップ サンプル）', price: base + 60,  shipping: null, points: Math.round((base+60)*0.03), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル商店' },
   ];
+  if (!yahooLive) {
+    list.push({ shop: 'yahoo', title: keyword + '（Yahoo!ショッピング サンプル）', price: base + 180, shipping: 0,   points: Math.round((base+180)*0.05), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル店' });
+    list.push({ shop: 'yahoo', title: keyword + '（Yahoo! 別ショップ サンプル）', price: base + 60,  shipping: null, points: Math.round((base+60)*0.03), image: '', url: 'https://shopping.yahoo.co.jp/', seller: 'サンプル商店' });
+  }
+  return list;
 }
 
 // ------- 実質価格の計算 -------
@@ -320,16 +372,18 @@ async function doSearch() {
   $status.textContent = '検索中…';
   $results.innerHTML = '<div class="empty">検索中…</div>';
 
-  const tasks = [ searchRakuten(keyword) ];
-  const [rakuten] = await Promise.all(tasks);
+  const [rakuten, yahoo] = await Promise.all([ searchRakuten(keyword), searchYahoo(keyword) ]);
+  const yahooLive = !!((store.get('yahooProxyUrl') || '').trim() || DEFAULT_YAHOO_PROXY);
 
-  let items = [...rakuten];
-  if ($demo.checked) items = items.concat(demoItems(keyword));
+  let items = [...rakuten, ...yahoo];
+  if ($demo.checked) items = items.concat(demoItems(keyword, yahooLive));
 
   const notes = [];
-  if (!store.get('rakutenAppId') || !store.get('rakutenAccessKey')) notes.push('楽天は未設定のため非表示（⚙️設定で有効化）');
+  if (!store.get('rakutenAppId') || !store.get('rakutenAccessKey')) notes.push('楽天は未設定（⚙️設定で有効化）');
   if (lastRakutenError) notes.push(lastRakutenError);
-  if ($demo.checked) notes.push('Yahoo!・Amazon はサンプル表示');
+  if (!yahooLive) notes.push('Yahoo!中継URL未設定');
+  if (lastYahooError) notes.push(lastYahooError);
+  if ($demo.checked) notes.push(yahooLive ? 'Amazon はサンプル表示' : 'Yahoo!・Amazon はサンプル表示');
   $status.textContent = items.length + '件' + (notes.length ? '（' + notes.join(' / ') + '）' : '');
 
   render(items);
