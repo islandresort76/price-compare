@@ -231,7 +231,7 @@ async function searchRakuten(keyword) {
     + '&applicationId=' + encodeURIComponent(appId)
     + '&accessKey=' + encodeURIComponent(accessKey)
     + '&keyword=' + encodeURIComponent(keyword)
-    + '&hits=10&sort=%2BitemPrice';
+    + '&hits=30&sort=%2BitemPrice';
   try {
     const res = await fetch(url);
     const data = await res.json();
@@ -271,7 +271,7 @@ async function searchYahoo(keyword) {
   const proxy = ((store.get('yahooProxyUrl') || '').trim() || DEFAULT_YAHOO_PROXY);
   if (!proxy) return []; // 中継URL未設定ならスキップ
 
-  const url = proxy + '?query=' + encodeURIComponent(keyword) + '&hits=10&sort=%2Bprice';
+  const url = proxy + '?query=' + encodeURIComponent(keyword) + '&hits=30&sort=%2Bprice';
   try {
     const res = await fetch(url);
     const data = await res.json();
